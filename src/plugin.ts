@@ -44,11 +44,37 @@ function isConfigured(account: Partial<ResolvedAccount> | null | undefined): boo
   return Boolean(account?.serverUrl && account?.auth?.botToken);
 }
 
+function inspectAccount(cfg: unknown, accountId?: string):
+  | { accountId: string; enabled: boolean; serverUrl: string; transportMode: string }
+  | null {
+  if (!accountId) return null;
+  const account = parseChannelConfig(cfg as OpenClawConfig).accounts[accountId];
+  return account
+    ? {
+        accountId,
+        enabled: account.enabled,
+        serverUrl: account.serverUrl,
+        transportMode: account.transport.mode
+      }
+    : null;
+}
+
 export const immojumpPlugin = {
+  id: "immojump",
   config: {
     listAccountIds,
     resolveAccount,
     isConfigured
+  },
+  gateway: {
+    startAccount: startGateway
+  },
+  base: {
+    id: "immojump",
+    setup: {
+      resolveAccount,
+      inspectAccount
+    }
   }
 };
 
