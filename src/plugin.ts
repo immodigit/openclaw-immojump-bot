@@ -188,11 +188,24 @@ export async function startGateway(ctx: GatewayContext): Promise<void> {
 
   await transport.start();
 
-  if (ctx.abortSignal) {
-    ctx.abortSignal.addEventListener("abort", () => {
+  // The OpenClaw gateway treats a returning startGateway as "channel
+  // exited" and tries to auto-restart it. On restart the webhook listener
+  // would EADDRINUSE the still-bound port. Block here until the runtime
+  // explicitly asks us to stop via abortSignal — that way the same
+  // transport instance stays alive for the whole gateway session.
+  await new Promise<void>((resolve) => {
+    const signal = ctx.abortSignal;
+    if (!signal) return; // no signal → block forever, gateway shutdown kills the process
+    if (signal.aborted) {
       transport.stop().catch(() => {});
+      resolve();
+      return;
+    }
+    signal.addEventListener("abort", () => {
+      transport.stop().catch(() => {});
+      resolve();
     });
-  }
+  });
 }
 
 export { parsePluginConfig };

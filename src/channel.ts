@@ -15,10 +15,18 @@ export type ChannelRuleOptions = {
 };
 
 export function shouldHandleInboundEvent(event: InboundEvent, opts: ChannelRuleOptions): boolean {
+  // Loop-prevention: never react to our own activity.
   if (event.senderUserId === opts.botUserId) return false;
+  // Plumbing-prevention: we need an event id to post the reply against.
   if (!event.feedEventId) return false;
-  const text = event.text.toLowerCase();
-  return opts.mentionNames.some((n) => text.includes(`@${n.toLowerCase()}`));
+  // We deliberately do NOT re-check the mention text here. The immo-calc
+  // backend already resolved the @-mention to this specific bot (otherwise
+  // the webhook wouldn't have fired); re-parsing the visible body —
+  // which only contains the notification headline, not the original
+  // post HTML — produced false negatives. ``mentionNames`` stays on the
+  // config purely for documentation / future routing decisions.
+  void opts.mentionNames;
+  return true;
 }
 
 export type ReplySession = {

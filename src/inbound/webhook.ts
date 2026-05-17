@@ -20,6 +20,45 @@ function verifySignature(secret: string, body: string, headerValue: string | und
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+type BackendEnvelope = {
+  v?: number;
+  event?: string;
+  event_id?: string;
+  delivered_at?: string;
+  bot?: { user_id?: string; organisation_id?: string; username?: string };
+  mention?: {
+    notification_id?: string;
+    headline?: string;
+    body?: string;
+    url?: string;
+    created_at?: string;
+    feed_event_id?: string | null;
+    comment_id?: string | null;
+  };
+};
+
+/**
+ * Translate the immo-calc outbound-webhook envelope (nested, snake_case)
+ * into the flat camelCase shape the rest of the plugin works with.
+ * `text` is taken from the original notification body / headline so the
+ * agent has something to react to even though the backend does not ship
+ * the full post HTML in the webhook today.
+ */
+function normaliseEvent(envelope: BackendEnvelope): InboundEvent | null {
+  if (!envelope || envelope.event !== "mention.created") return null;
+  const mention = envelope.mention ?? {};
+  const bot = envelope.bot ?? {};
+  return {
+    id: envelope.event_id ?? mention.notification_id ?? "",
+    type: "mention.created",
+    feedEventId: mention.feed_event_id ?? null,
+    commentId: mention.comment_id ?? null,
+    text: [mention.headline, mention.body].filter(Boolean).join(" — "),
+    senderUserId: bot.user_id ?? "",
+    createdAt: mention.created_at ?? envelope.delivered_at ?? new Date().toISOString(),
+  };
+}
+
 export function createWebhookTransport(opts: WebhookTransportOptions): InboundTransport {
   let server: Server | null = null;
   const log = opts.logger ?? (() => {});
@@ -42,12 +81,19 @@ export function createWebhookTransport(opts: WebhookTransportOptions): InboundTr
             res.end();
             return;
           }
-          let event: InboundEvent;
+          let envelope: BackendEnvelope;
           try {
-            event = JSON.parse(raw) as InboundEvent;
+            envelope = JSON.parse(raw) as BackendEnvelope;
           } catch (err) {
             log("webhook body parse error", { err: String(err) });
             res.statusCode = 400;
+            res.end();
+            return;
+          }
+          const event = normaliseEvent(envelope);
+          if (!event) {
+            log("webhook payload not recognised", { event: envelope.event });
+            res.statusCode = 422;
             res.end();
             return;
           }
