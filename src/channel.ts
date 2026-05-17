@@ -16,6 +16,7 @@ export type ChannelRuleOptions = {
 
 export function shouldHandleInboundEvent(event: InboundEvent, opts: ChannelRuleOptions): boolean {
   if (event.senderUserId === opts.botUserId) return false;
+  if (!event.feedEventId) return false;
   const text = event.text.toLowerCase();
   return opts.mentionNames.some((n) => text.includes(`@${n.toLowerCase()}`));
 }
@@ -29,21 +30,21 @@ export type ReplySession = {
 
 export type SendReplyLifecycleOptions = {
   client: ImmoJumpClient;
-  activityId: string;
+  feedEventId: string;
 } & (
   | { finalText: string; run?: never }
   | { finalText?: never; run(session: ReplySession): Promise<void> }
 );
 
 export async function sendReplyLifecycle(opts: SendReplyLifecycleOptions): Promise<void> {
-  const placeholder = await opts.client.postComment(opts.activityId, THINKING_PLACEHOLDER);
+  const placeholder = await opts.client.postComment(opts.feedEventId, THINKING_PLACEHOLDER);
 
   let lastBody = THINKING_PLACEHOLDER;
   let finalSeen = false;
 
   const flush = async (next: string): Promise<void> => {
     if (next === lastBody) return;
-    await opts.client.updateComment(opts.activityId, placeholder.id, next);
+    await opts.client.updateComment(placeholder.id, next);
     lastBody = next;
   };
 

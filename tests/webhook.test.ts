@@ -55,7 +55,7 @@ describe("webhook transport", () => {
     const event: InboundEvent = {
       id: "evt_1",
       type: "mention.created",
-      activityId: "act_1",
+      feedEventId: "fe_1",
       commentId: "c_1",
       text: "@bot hello",
       senderUserId: "u_1",

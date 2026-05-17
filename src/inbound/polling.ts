@@ -25,7 +25,7 @@ export function createPollingTransport(opts: PollingTransportOptions): InboundTr
         const event: InboundEvent = {
           id: m.id,
           type: "mention.created",
-          activityId: m.activity_id,
+          feedEventId: m.feed_event_id ?? null,
           commentId: m.comment_id,
           text: m.body_html,
           senderUserId: m.sender_user_id,

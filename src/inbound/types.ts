@@ -3,11 +3,21 @@ export type InboundEvent = {
   id: string;
   /** Event type — currently `mention.created`. */
   type: "mention.created";
-  /** Activity the comment lives in. */
-  activityId: string;
-  /** Comment in which the bot was mentioned. */
+  /**
+   * OrgFeedEvent id (the thread root). The bot's reply is posted as a
+   * comment on this event via `POST /api/organisation-feed/<id>/
+   * comments`. May be `null` for legacy/non-feed mention sources — the
+   * plugin should ignore those (or fall back to URL parsing).
+   */
+  feedEventId: string | null;
+  /**
+   * OrgFeedComment id in which the @-mention itself appeared, when the
+   * trigger was a comment-on-comment (vs. a top-level mention in the
+   * thread). Useful as reply-to context for the agent; not required
+   * for posting the reply.
+   */
   commentId: string | null;
-  /** Raw mention text (HTML stripped). */
+  /** Raw mention text (HTML — the plugin may strip tags). */
   text: string;
   /** Who triggered the mention. */
   senderUserId: string;

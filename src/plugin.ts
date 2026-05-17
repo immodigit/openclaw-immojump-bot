@@ -100,9 +100,11 @@ export async function startGateway(ctx: GatewayContext): Promise<void> {
     ) {
       return;
     }
+    if (!event.feedEventId) return;
+    const feedEventId = event.feedEventId;
     await sendReplyLifecycle({
       client,
-      activityId: event.activityId,
+      feedEventId,
       run: async (session) => {
         if (!ctx.channelRuntime?.dispatch) {
           await session.update({
@@ -115,11 +117,11 @@ export async function startGateway(ctx: GatewayContext): Promise<void> {
         }
         const result = await ctx.channelRuntime.dispatch({
           accountId: ctx.accountId,
-          sessionKey: `immojump:${ctx.accountId}:${event.activityId}`,
+          sessionKey: `immojump:${ctx.accountId}:${feedEventId}`,
           text: event.text,
           metadata: {
             channel: "immojump",
-            activityId: event.activityId,
+            feedEventId,
             commentId: event.commentId,
             senderUserId: event.senderUserId,
             agent: account.agent
