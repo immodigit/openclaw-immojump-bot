@@ -1,0 +1,60 @@
+{
+  "name": "@immodigit/openclaw-immojump-bot",
+  "version": "0.1.0",
+  "private": false,
+  "description": "OpenClaw channel plugin that participates in the immoJUMP feed as a first-class bot user — webhook inbound, REST outbound, replies as comments in the same activity thread.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/immodigit/openclaw-immojump-bot.git"
+  },
+  "homepage": "https://github.com/immodigit/openclaw-immojump-bot#readme",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "src",
+    "openclaw.plugin.json",
+    "README.md",
+    "tsconfig.json",
+    "tsconfig.build.json"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "setupEntry": "./src/setup-entry.ts",
+    "channel": {
+      "id": "immojump",
+      "label": "immoJUMP",
+      "selectionLabel": "immoJUMP",
+      "docsPath": "/channels/immojump",
+      "docsLabel": "immojump",
+      "blurb": "B2B channel plugin: the bot answers @-mentions directly inside the immoJUMP activity feed, streaming tool-call updates into a single editable comment.",
+      "aliases": [
+        "immo",
+        "ij"
+      ]
+    },
+    "install": {
+      "npmSpec": "@immodigit/openclaw-immojump-bot",
+      "localPath": "."
+    }
+  }
+}

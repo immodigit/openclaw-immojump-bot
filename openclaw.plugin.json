@@ -1,0 +1,96 @@
+{
+  "id": "immojump",
+  "name": "immoJUMP",
+  "description": "OpenClaw channel plugin for the immoJUMP activity feed. Webhook-driven inbound (with polling fallback), comment-stream outbound — replies live in the same thread the bot was mentioned in.",
+  "version": "0.1.0",
+  "kind": "channel",
+  "channels": ["immojump"],
+  "channelConfigs": {
+    "immojump": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "serverUrl": { "type": "string", "minLength": 1 },
+                "auth": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "botToken": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["botToken"]
+                },
+                "transport": {
+                  "type": "object",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "mode": { "const": "webhook" },
+                        "listenHost": { "type": "string", "default": "127.0.0.1" },
+                        "listenPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                        "webhookSecret": { "type": "string", "minLength": 16 }
+                      },
+                      "required": ["mode", "listenPort", "webhookSecret"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "mode": { "const": "polling" },
+                        "pollIntervalMs": { "type": "integer", "minimum": 1000 }
+                      },
+                      "required": ["mode"]
+                    }
+                  ]
+                },
+                "mentionNames": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 }
+                },
+                "agent": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Optional explicit OpenClaw agent id this account should dispatch inbound traffic to. Defaults to the gateway's main agent."
+                }
+              },
+              "required": ["enabled", "serverUrl", "auth", "transport"]
+            }
+          }
+        }
+      },
+      "uiHints": {
+        "accounts.*.serverUrl": {
+          "label": "immoJUMP base URL",
+          "placeholder": "https://app.immojump.de"
+        },
+        "accounts.*.auth.botToken": {
+          "label": "Bot bearer token",
+          "secret": true,
+          "help": "Issued in immoJUMP under Organisation → Bots → Token rotate."
+        },
+        "accounts.*.transport.mode": {
+          "label": "Inbound transport",
+          "help": "`webhook` (recommended) listens on listenPort for HMAC-signed events from immoJUMP. `polling` pulls /api/bots/me/mentions on an interval — use only when no inbound port is possible."
+        },
+        "accounts.*.transport.webhookSecret": {
+          "label": "Webhook HMAC secret",
+          "secret": true,
+          "help": "Shared secret between immoJUMP backend and this plugin. Set on the OpenClawDeployment row."
+        },
+        "accounts.*.mentionNames": {
+          "label": "Mention names",
+          "help": "Nicknames this bot answers to in the immoJUMP feed (the @-name on OrganisationMember)."
+        }
+      }
+    }
+  }
+}

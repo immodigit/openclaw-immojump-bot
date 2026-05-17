@@ -1,0 +1,76 @@
+import { ImmoJumpClient } from "./client.js";
+import {
+  EMPTY_REPLY_FALLBACK,
+  formatReplyFailure,
+  formatReplyUpdate,
+  THINKING_PLACEHOLDER,
+  type ReplyStageKind,
+  type ReplyStagePayload
+} from "./format.js";
+import type { InboundEvent } from "./inbound/types.js";
+
+export type ChannelRuleOptions = {
+  botUserId: string;
+  mentionNames: string[];
+};
+
+export function shouldHandleInboundEvent(event: InboundEvent, opts: ChannelRuleOptions): boolean {
+  if (event.senderUserId === opts.botUserId) return false;
+  const text = event.text.toLowerCase();
+  return opts.mentionNames.some((n) => text.includes(`@${n.toLowerCase()}`));
+}
+
+export type ReplySession = {
+  commentId: string;
+  update(params: { kind: ReplyStageKind; payload: ReplyStagePayload }): Promise<void>;
+  hasFinalUpdate(): boolean;
+  fail(error: unknown): Promise<void>;
+};
+
+export type SendReplyLifecycleOptions = {
+  client: ImmoJumpClient;
+  activityId: string;
+} & (
+  | { finalText: string; run?: never }
+  | { finalText?: never; run(session: ReplySession): Promise<void> }
+);
+
+export async function sendReplyLifecycle(opts: SendReplyLifecycleOptions): Promise<void> {
+  const placeholder = await opts.client.postComment(opts.activityId, THINKING_PLACEHOLDER);
+
+  let lastBody = THINKING_PLACEHOLDER;
+  let finalSeen = false;
+
+  const flush = async (next: string): Promise<void> => {
+    if (next === lastBody) return;
+    await opts.client.updateComment(opts.activityId, placeholder.id, next);
+    lastBody = next;
+  };
+
+  if ("finalText" in opts && opts.finalText !== undefined) {
+    await flush(opts.finalText.trim() || EMPTY_REPLY_FALLBACK);
+    return;
+  }
+
+  const session: ReplySession = {
+    commentId: placeholder.id,
+    async update({ kind, payload }) {
+      const next = formatReplyUpdate(kind, payload, lastBody);
+      if (kind === "final") finalSeen = true;
+      await flush(next);
+    },
+    hasFinalUpdate() {
+      return finalSeen;
+    },
+    async fail(error) {
+      await flush(formatReplyFailure(error));
+    }
+  };
+
+  try {
+    await opts.run!(session);
+    if (!finalSeen) await flush(lastBody === THINKING_PLACEHOLDER ? EMPTY_REPLY_FALLBACK : lastBody);
+  } catch (err) {
+    await session.fail(err);
+  }
+}
