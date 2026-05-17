@@ -52,22 +52,35 @@ describe("webhook transport", () => {
     });
     await t.start();
     transport = t;
-    const event: InboundEvent = {
-      id: "evt_1",
-      type: "mention.created",
-      feedEventId: "fe_1",
-      commentId: "c_1",
-      text: "@bot hello",
-      senderUserId: "u_1",
-      createdAt: "2026-05-17T12:00:00Z"
+    // The backend emits a nested envelope; the webhook transport
+    // normalises it into the flat InboundEvent the rest of the plugin
+    // works with.
+    const envelope = {
+      v: 1,
+      event: "mention.created",
+      event_id: "evt_1",
+      delivered_at: "2026-05-17T12:00:00Z",
+      bot: { user_id: "u_1", organisation_id: "org_1", username: "leadbot" },
+      mention: {
+        notification_id: "n_1",
+        headline: "Erwähnung",
+        body: "Hi",
+        url: "/o/x/y",
+        created_at: "2026-05-17T12:00:00Z",
+        feed_event_id: "fe_1",
+        comment_id: "c_1"
+      }
     };
-    const body = JSON.stringify(event);
+    const body = JSON.stringify(envelope);
     const resp = await fetch(`http://127.0.0.1:${port}/inbound`, {
       method: "POST",
       headers: { "x-immojump-signature": sign(body), "content-type": "application/json" },
       body
     });
     expect(resp.status).toBe(202);
-    expect(received).toEqual([event]);
+    expect(received).toHaveLength(1);
+    expect(received[0].feedEventId).toBe("fe_1");
+    expect(received[0].commentId).toBe("c_1");
+    expect(received[0].senderUserId).toBe("u_1");
   });
 });
