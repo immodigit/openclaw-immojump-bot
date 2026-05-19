@@ -6,10 +6,18 @@ type GatewayApi = {
 };
 
 export function register(api: GatewayApi): void {
+  // Diagnostic — track which lifecycle hook the host actually calls.
+  // The host runtime varies between bundled-channel vs. external-plugin
+  // discovery paths; when accounts don't start it's almost always
+  // because activate() wasn't reached.
+  // eslint-disable-next-line no-console
+  console.error(`[immojump-bot] register() called, hasRegisterChannel=${typeof api.registerChannel === "function"}`);
   api.registerChannel?.({ plugin: immojumpPlugin });
 }
 
 export function activate(api: GatewayApi): void {
+  // eslint-disable-next-line no-console
+  console.error(`[immojump-bot] activate() called, hasRegisterGatewayMethod=${typeof api.registerGatewayMethod === "function"}`);
   api.registerGatewayMethod("immojump.gateway.startAccount", (ctx) =>
     startGateway(ctx as Parameters<typeof startGateway>[0])
   );
