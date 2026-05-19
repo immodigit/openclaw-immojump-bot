@@ -131,9 +131,16 @@ export async function startGateway(ctx: GatewayContext): Promise<void> {
   const dumpFn = (label: string, fn: unknown) => {
     if (typeof fn === "function") {
       const src = fn.toString();
-      const sig = src.slice(0, Math.min(src.indexOf("{"), 240));
+      // Look for the first destructure of `params` to learn the field
+      // shape — common pattern: ``const { foo, bar, baz } = params;``
+      const destructure = src.match(/\b(?:const|let|var)\s*\{\s*([^}]{1,800})\s*\}\s*=\s*\b\w+\s*[;,]/m);
+      const lead = src.slice(0, 600).replace(/\s+/g, " ");
       // eslint-disable-next-line no-console
-      console.error(`[immojump-bot] ${label} sig: ${sig.replace(/\s+/g, " ")}`);
+      console.error(`[immojump-bot] ${label} lead: ${lead}`);
+      if (destructure) {
+        // eslint-disable-next-line no-console
+        console.error(`[immojump-bot] ${label} destructure: ${destructure[1].replace(/\s+/g, " ")}`);
+      }
     }
   };
   const turn = cr?.turn as Record<string, unknown> | undefined;
