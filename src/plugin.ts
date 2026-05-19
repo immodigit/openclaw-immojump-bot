@@ -125,6 +125,15 @@ export async function startGateway(ctx: GatewayContext): Promise<void> {
     `immojump:${ctx.accountId}:connected as @${identity.nickname} (${identity.bot_user_id})`
   );
 
+  // Diagnostic — host context shape varies. The plugin scaffold drops
+  // into a stub reply when ``ctx.channelRuntime.dispatch`` isn't there,
+  // so when the bot answers with "_(...not wired...)_" the keys on ctx
+  // tell us where the dispatch handle actually lives.
+  // eslint-disable-next-line no-console
+  console.error(`[immojump-bot] startGateway ctx keys: ${Object.keys(ctx).join(",")}`);
+  // eslint-disable-next-line no-console
+  console.error(`[immojump-bot] startGateway ctx.channelRuntime keys: ${ctx.channelRuntime ? Object.keys(ctx.channelRuntime as object).join(",") : "<missing>"}`);
+
   const handler = async (event: InboundEvent): Promise<void> => {
     if (
       !shouldHandleInboundEvent(event, {
