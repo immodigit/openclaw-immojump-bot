@@ -1,5 +1,8 @@
-export const THINKING_PLACEHOLDER = "🤔 _Denke nach…_";
-export const EMPTY_REPLY_FALLBACK = "_(keine Antwort generiert)_";
+// immoJUMP rendert Kommentar-Bodies als HTML, nicht als Markdown.
+// Mit ``_…_`` blieben die Unterstriche als Zeichen stehen. ``<em>`` wird
+// sauber kursiv dargestellt.
+export const THINKING_PLACEHOLDER = "🤔 <em>Denke nach…</em>";
+export const EMPTY_REPLY_FALLBACK = "<em>(keine Antwort generiert)</em>";
 
 export type ReplyStageKind = "tool" | "block" | "final";
 
@@ -42,5 +45,5 @@ export function formatReplyUpdate(
 
 export function formatReplyFailure(error: unknown): string {
   const msg = error instanceof Error ? error.message : String(error);
-  return `⚠️ _Bot-Fehler:_ ${msg.slice(0, 500)}`;
+  return `⚠️ <em>Bot-Fehler:</em> ${msg.slice(0, 500)}`;
 }
