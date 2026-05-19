@@ -31,10 +31,15 @@ export type ChannelRuntimeLike = {
 };
 
 export function listAccountIds(cfg: OpenClawConfig): string[] {
-  return Object.keys(parseChannelConfig(cfg).accounts);
+  const ids = Object.keys(parseChannelConfig(cfg).accounts);
+  // eslint-disable-next-line no-console
+  console.error(`[immojump-bot] listAccountIds() -> [${ids.join(",")}]`);
+  return ids;
 }
 
 export function resolveAccount(cfg: unknown, accountId?: string): ResolvedAccount | null {
+  // eslint-disable-next-line no-console
+  console.error(`[immojump-bot] resolveAccount(accountId=${accountId})`);
   if (!accountId) return null;
   const accounts = parseChannelConfig(cfg as OpenClawConfig).accounts;
   const account = accounts[accountId];
@@ -102,6 +107,8 @@ async function saveCursor(path: string, value: string): Promise<void> {
 }
 
 export async function startGateway(ctx: GatewayContext): Promise<void> {
+  // eslint-disable-next-line no-console
+  console.error(`[immojump-bot] startGateway(accountId=${ctx.accountId})`);
   const account =
     ctx.account ?? resolveAccount(ctx.cfg ?? {}, ctx.accountId);
   if (!account || !isConfigured(account) || !account.enabled) {
