@@ -215,16 +215,28 @@ export async function startGateway(ctx: GatewayContext): Promise<void> {
   const cr = ctx.channelRuntime as ImmoChannelRuntime | undefined;
 
   const handler = async (event: InboundEvent): Promise<void> => {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[immojump-bot] handler() account=${ctx.accountId} event.id=${event.id} feedEventId=${event.feedEventId} senderUserId=${event.senderUserId}`
+    );
     if (
       !shouldHandleInboundEvent(event, {
         botUserId: identity.bot_user_id,
         mentionNames: [identity.nickname, ...account.mentionNames]
       })
     ) {
+      // eslint-disable-next-line no-console
+      console.error(`[immojump-bot] handler() account=${ctx.accountId} -> shouldHandle=false, skip`);
       return;
     }
-    if (!event.feedEventId) return;
+    if (!event.feedEventId) {
+      // eslint-disable-next-line no-console
+      console.error(`[immojump-bot] handler() account=${ctx.accountId} -> no feedEventId, skip`);
+      return;
+    }
     const feedEventId = event.feedEventId;
+    // eslint-disable-next-line no-console
+    console.error(`[immojump-bot] handler() account=${ctx.accountId} dispatching to agent=${account.agent ?? '<default>'}`);
 
     if (!cr) {
       // No host runtime — fail loudly so the operator notices the gateway
