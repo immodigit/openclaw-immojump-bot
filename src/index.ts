@@ -5,22 +5,33 @@ type GatewayApi = {
   registerChannel?(args: { plugin: unknown }): void;
 };
 
+function wireStartAccount(api: GatewayApi, callerLabel: string): void {
+  if (typeof api.registerGatewayMethod !== "function") {
+    // eslint-disable-next-line no-console
+    console.error(`[immojump-bot] ${callerLabel}: registerGatewayMethod missing on api — startAccount cannot be wired`);
+    return;
+  }
+  api.registerGatewayMethod("immojump.gateway.startAccount", (ctx) =>
+    startGateway(ctx as Parameters<typeof startGateway>[0])
+  );
+  // eslint-disable-next-line no-console
+  console.error(`[immojump-bot] ${callerLabel}: registered immojump.gateway.startAccount`);
+}
+
 export function register(api: GatewayApi): void {
-  // Diagnostic — track which lifecycle hook the host actually calls.
-  // The host runtime varies between bundled-channel vs. external-plugin
-  // discovery paths; when accounts don't start it's almost always
-  // because activate() wasn't reached.
+  // Some host runtimes only invoke register() and skip activate(); the
+  // gateway-method wiring must live here too so channel accounts can
+  // start regardless of which lifecycle hook the host picks.
   // eslint-disable-next-line no-console
   console.error(`[immojump-bot] register() called, hasRegisterChannel=${typeof api.registerChannel === "function"}`);
   api.registerChannel?.({ plugin: immojumpPlugin });
+  wireStartAccount(api, "register");
 }
 
 export function activate(api: GatewayApi): void {
   // eslint-disable-next-line no-console
-  console.error(`[immojump-bot] activate() called, hasRegisterGatewayMethod=${typeof api.registerGatewayMethod === "function"}`);
-  api.registerGatewayMethod("immojump.gateway.startAccount", (ctx) =>
-    startGateway(ctx as Parameters<typeof startGateway>[0])
-  );
+  console.error(`[immojump-bot] activate() called`);
+  wireStartAccount(api, "activate");
 }
 
 export default {
@@ -40,8 +51,6 @@ export default {
   register,
   activate,
   registerFull(api: GatewayApi) {
-    api.registerGatewayMethod("immojump.gateway.startAccount", (ctx) =>
-      startGateway(ctx as Parameters<typeof startGateway>[0])
-    );
+    wireStartAccount(api, "registerFull");
   }
 };
