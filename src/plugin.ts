@@ -125,14 +125,32 @@ export async function startGateway(ctx: GatewayContext): Promise<void> {
     `immojump:${ctx.accountId}:connected as @${identity.nickname} (${identity.bot_user_id})`
   );
 
-  // Diagnostic — host context shape varies. The plugin scaffold drops
-  // into a stub reply when ``ctx.channelRuntime.dispatch`` isn't there,
-  // so when the bot answers with "_(...not wired...)_" the keys on ctx
-  // tell us where the dispatch handle actually lives.
+  // Diagnostic — drill into the channelRuntime subkeys to find where
+  // the agent-turn dispatch actually lives. Known top-level shape:
+  // text, reply, routing, pairing, media, activity, session, mentions,
+  // reactions, groups, debounce, commands, outbound, turn, ...
+  const cr = ctx.channelRuntime as Record<string, unknown> | undefined;
+  const dump = (label: string, obj: unknown) => {
+    if (obj && typeof obj === "object") {
+      // eslint-disable-next-line no-console
+      console.error(`[immojump-bot] ${label} keys/types: ${Object.entries(obj as object).map(([k, v]) => `${k}=${typeof v}`).join(",")}`);
+    } else {
+      // eslint-disable-next-line no-console
+      console.error(`[immojump-bot] ${label}: ${typeof obj}`);
+    }
+  };
   // eslint-disable-next-line no-console
-  console.error(`[immojump-bot] startGateway ctx keys: ${Object.keys(ctx).join(",")}`);
-  // eslint-disable-next-line no-console
-  console.error(`[immojump-bot] startGateway ctx.channelRuntime keys: ${ctx.channelRuntime ? Object.keys(ctx.channelRuntime as object).join(",") : "<missing>"}`);
+  console.error(`[immojump-bot] ctx keys/types: ${Object.entries(ctx as object).map(([k, v]) => `${k}=${typeof v}`).join(",")}`);
+  dump("ctx.runtime", (ctx as { runtime?: unknown }).runtime);
+  if (cr) {
+    dump("cr.text", cr.text);
+    dump("cr.turn", cr.turn);
+    dump("cr.commands", cr.commands);
+    dump("cr.outbound", cr.outbound);
+    dump("cr.mentions", cr.mentions);
+    dump("cr.routing", cr.routing);
+    dump("cr.activity", cr.activity);
+  }
 
   const handler = async (event: InboundEvent): Promise<void> => {
     if (
