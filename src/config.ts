@@ -22,9 +22,25 @@ const pollingTransportSchema = z
   })
   .strict();
 
+// Telegram-style long polling: a single GET that the backend holds open
+// for ``timeoutSec`` seconds (via Redis pub/sub on the bot's channel)
+// until a new mention arrives. The plugin loops back into the next call
+// the moment a request returns — so an idle bot does ~1 request per
+// ``timeoutSec`` window instead of ~1 per ``pollIntervalMs``.
+const longpollTransportSchema = z
+  .object({
+    mode: z.literal("longpoll"),
+    timeoutSec: z.number().int().min(1).max(50).default(25)
+  })
+  .strict();
+
 const transportSchema = z.preprocess(
   (value) => value ?? { mode: "polling" },
-  z.discriminatedUnion("mode", [webhookTransportSchema, pollingTransportSchema])
+  z.discriminatedUnion("mode", [
+    webhookTransportSchema,
+    pollingTransportSchema,
+    longpollTransportSchema
+  ])
 );
 
 const accountSchema = z

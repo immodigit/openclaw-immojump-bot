@@ -9,6 +9,7 @@ import {
   parsePluginConfig,
   type PluginAccountConfig
 } from "./config.js";
+import { createLongpollTransport } from "./inbound/longpoll.js";
 import { createPollingTransport } from "./inbound/polling.js";
 import { createWebhookTransport } from "./inbound/webhook.js";
 import type { InboundEvent, InboundTransport } from "./inbound/types.js";
@@ -175,15 +176,29 @@ export async function startGateway(ctx: GatewayContext): Promise<void> {
     const stateDir =
       ctx.cfg?.session?.store ?? join(homedir(), ".openclaw", "channels", "immojump");
     const cursorPath = join(stateDir, ctx.accountId, "cursor.txt");
-    transport = createPollingTransport({
-      client,
-      intervalMs: account.transport.pollIntervalMs,
-      handler,
+    const cursorIO = {
       loadCursor: () => loadCursor(cursorPath),
-      saveCursor: (v) => saveCursor(cursorPath, v),
-      logger: (msg, meta) =>
-        ctx.setStatus?.(`immojump:${ctx.accountId}:polling:${msg}${meta ? " " + JSON.stringify(meta) : ""}`)
-    });
+      saveCursor: (v: string) => saveCursor(cursorPath, v)
+    };
+    if (account.transport.mode === "longpoll") {
+      transport = createLongpollTransport({
+        client,
+        timeoutSec: account.transport.timeoutSec,
+        handler,
+        ...cursorIO,
+        logger: (msg, meta) =>
+          ctx.setStatus?.(`immojump:${ctx.accountId}:longpoll:${msg}${meta ? " " + JSON.stringify(meta) : ""}`)
+      });
+    } else {
+      transport = createPollingTransport({
+        client,
+        intervalMs: account.transport.pollIntervalMs,
+        handler,
+        ...cursorIO,
+        logger: (msg, meta) =>
+          ctx.setStatus?.(`immojump:${ctx.accountId}:polling:${msg}${meta ? " " + JSON.stringify(meta) : ""}`)
+      });
+    }
   }
 
   await transport.start();

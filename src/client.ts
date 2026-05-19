@@ -59,9 +59,33 @@ export class ImmoJumpClient {
     return identity;
   }
 
-  async listMentions(sinceIso?: string): Promise<Mention[]> {
-    const qs = sinceIso ? `?since=${encodeURIComponent(sinceIso)}` : "";
-    const resp = await this.request<{ mentions: Mention[] }>("GET", `/api/bots/me/mentions${qs}`);
+  /**
+   * Pull the next batch of mentions for the calling bot.
+   *
+   * - ``sinceIso`` — the ``created_at`` of the last mention already
+   *   processed. Server returns notifications strictly newer than this.
+   * - ``timeoutSec`` — Telegram-style long-polling. ``0`` (default)
+   *   returns immediately; ``1..50`` makes the server hold the
+   *   connection up to N seconds via Redis pub/sub until a new mention
+   *   arrives. Cuts request volume ~5-10x vs short polling at 5s.
+   *
+   * The HTTP call's own timeout is set to ``timeoutSec + 10`` so the
+   * client doesn't abort while the server is legitimately waiting.
+   */
+  async listMentions(sinceIso?: string, timeoutSec?: number): Promise<Mention[]> {
+    const params: string[] = [];
+    if (sinceIso) params.push(`since=${encodeURIComponent(sinceIso)}`);
+    if (timeoutSec && timeoutSec > 0) params.push(`timeout=${timeoutSec}`);
+    const qs = params.length ? `?${params.join("&")}` : "";
+    const fetchTimeoutMs = timeoutSec && timeoutSec > 0
+      ? (timeoutSec + 10) * 1000
+      : undefined;
+    const resp = await this.request<{ mentions: Mention[] }>(
+      "GET",
+      `/api/bots/me/mentions${qs}`,
+      undefined,
+      { signalTimeoutMs: fetchTimeoutMs },
+    );
     return resp.mentions;
   }
 
@@ -86,23 +110,41 @@ export class ImmoJumpClient {
     );
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    opts?: { signalTimeoutMs?: number },
+  ): Promise<T> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.token}`,
       "Content-Type": "application/json",
       Accept: "application/json"
     };
     if (this.organisationId) headers["X-Organisation-Id"] = this.organisationId;
-    const resp = await this.fetcher(`${this.base}${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
-      throw new Error(`immoJUMP ${method} ${path} -> ${resp.status} ${resp.statusText}: ${text}`);
+    // Long-polling requests need a generous client-side timeout — the
+    // server holds the connection for ``timeoutSec`` seconds before
+    // responding. We allow a 10s grace beyond that for header/body
+    // transfer, then abort.
+    const controller = opts?.signalTimeoutMs ? new AbortController() : undefined;
+    const timer = controller && opts?.signalTimeoutMs
+      ? setTimeout(() => controller.abort(), opts.signalTimeoutMs)
+      : undefined;
+    try {
+      const resp = await this.fetcher(`${this.base}${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: controller?.signal,
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(`immoJUMP ${method} ${path} -> ${resp.status} ${resp.statusText}: ${text}`);
+      }
+      if (resp.status === 204) return undefined as T;
+      return (await resp.json()) as T;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    if (resp.status === 204) return undefined as T;
-    return (await resp.json()) as T;
   }
 }

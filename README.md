@@ -6,10 +6,11 @@ This is the B2B-internal counterpart to [openclaw-rocketchat-bot](https://github
 
 ## How it talks to immoJUMP
 
-Two inbound transports:
+Three inbound transports:
 
-- **`webhook`** *(recommended)* — the plugin opens a small HTTP listener; the immoJUMP backend POSTs a HMAC-signed event whenever the bot is mentioned (`mention.created`, `comment.reply`). No polling overhead, near-instant delivery.
-- **`polling`** *(fallback for hosts that can't expose any inbound port)* — the plugin pulls `GET /api/bots/me/mentions?since=…` on an interval.
+- **`webhook`** — the plugin opens a small HTTP listener; the immoJUMP backend POSTs a HMAC-signed event whenever the bot is mentioned (`mention.created`, `comment.reply`). No polling overhead, near-instant delivery. Requires the bot deployment to be reachable from immoJUMP.
+- **`longpoll`** *(recommended for firewalled / Tailscale-only deployments)* — Telegram-style. The plugin holds a single GET open for `timeoutSec` (default 25 s); the backend wakes it via Redis pub/sub the moment a new mention arrives, otherwise replies empty on timeout. Idle bots make ≈ 1 request per `timeoutSec` window, so 4 bots ≈ 14 000 requests/day total.
+- **`polling`** *(fallback when long-poll backend is unavailable)* — short polling: the plugin pulls `GET /api/bots/me/mentions?since=…` on a fixed `pollIntervalMs` interval.
 
 Outbound is always REST against the immoJUMP backend, authenticated with the bot's bearer token:
 
@@ -51,7 +52,15 @@ channels:
         agent: "leadbot"
 ```
 
-Polling-mode fallback:
+Long-poll mode (no inbound port needed; the bot pulls but the backend holds the connection open):
+
+```yaml
+        transport:
+          mode: "longpoll"
+          timeoutSec: 25
+```
+
+Polling-mode fallback (short polling, set when the backend doesn't yet support `timeout=`):
 
 ```yaml
         transport:
