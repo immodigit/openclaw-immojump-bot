@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_REPLY_FALLBACK, THINKING_PLACEHOLDER, formatReplyUpdate } from "../src/format.js";
+import {
+  EMPTY_REPLY_FALLBACK,
+  THINKING_PLACEHOLDER,
+  formatReplyUpdate,
+  markdownToHtml
+} from "../src/format.js";
 
 describe("formatReplyUpdate", () => {
   it("replaces the placeholder on first tool stage", () => {
@@ -31,7 +36,55 @@ describe("formatReplyUpdate", () => {
     expect(formatReplyUpdate("final", { text: "   " }, "anything")).toBe(EMPTY_REPLY_FALLBACK);
   });
 
-  it("uses final text verbatim when non-empty", () => {
-    expect(formatReplyUpdate("final", { text: "Hello, world." }, "prev")).toBe("Hello, world.");
+  it("converts agent markdown to HTML on final", () => {
+    // Plain text gets wrapped in <p> by Marked — that's fine, immoJUMP
+    // renders <p> blocks natively.
+    const out = formatReplyUpdate("final", { text: "Hello, world." }, "prev");
+    expect(out).toBe("<p>Hello, world.</p>");
+  });
+
+  it("renders **bold** as <strong> on final", () => {
+    const out = formatReplyUpdate("final", { text: "Take **Region** and go." }, THINKING_PLACEHOLDER);
+    expect(out).toContain("<strong>Region</strong>");
+    expect(out).not.toContain("**");
+  });
+
+  it("renders bullet lists as <ul><li> on final", () => {
+    const out = formatReplyUpdate(
+      "final",
+      { text: "Optionen:\n- alpha\n- beta\n- gamma" },
+      THINKING_PLACEHOLDER
+    );
+    expect(out).toMatch(/<ul>.*<li>alpha<\/li>.*<\/ul>/s);
+    expect(out).not.toMatch(/^- /m);
+  });
+
+  it("preserves the placeholder when block payload has no text", () => {
+    const out = formatReplyUpdate("block", { text: "" }, THINKING_PLACEHOLDER);
+    expect(out).toBe(THINKING_PLACEHOLDER);
+  });
+});
+
+describe("markdownToHtml", () => {
+  it("returns empty string for empty input", () => {
+    expect(markdownToHtml("")).toBe("");
+  });
+
+  it("converts bold + italic", () => {
+    const out = markdownToHtml("**bold** and *italic*");
+    expect(out).toContain("<strong>bold</strong>");
+    expect(out).toContain("<em>italic</em>");
+  });
+
+  it("converts a fenced code block", () => {
+    const out = markdownToHtml("```json\n{\"a\":1}\n```");
+    expect(out).toContain("<pre>");
+    expect(out).toContain("<code");
+    expect(out).toContain("{&quot;a&quot;:1}");
+  });
+
+  it("turns single newlines into <br> (breaks: true)", () => {
+    const out = markdownToHtml("line one\nline two");
+    expect(out).toMatch(/line one<br\s*\/?>/);
   });
 });
