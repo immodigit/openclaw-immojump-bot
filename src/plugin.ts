@@ -21,14 +21,101 @@ export type OpenClawConfig = {
 
 export type ResolvedAccount = PluginAccountConfig & { accountId: string };
 
-export type ChannelRuntimeLike = {
-  dispatch?(payload: {
-    accountId: string;
-    sessionKey: string;
-    text: string;
-    metadata: Record<string, unknown>;
-  }): Promise<{ replyText?: string } | void>;
+// Surface of ctx.channelRuntime we actually use, modelled on what the
+// host runtime in OpenClaw 2026.5.x exposes. Keys discovered by
+// diagnostic dump on first boot — only the subset we depend on is
+// typed here; the host has many more helpers we don't need.
+type ResolvedAgentRoute = {
+  agentId: string;
+  sessionKey: string;
+  accountId?: string;
+  mainSessionKey?: string;
 };
+
+type DeliverInfo = { kind: "tool" | "block" | "final" };
+
+export type ImmoChannelRuntime = {
+  routing: {
+    resolveAgentRoute(params: {
+      cfg: unknown;
+      channel: string;
+      accountId: string;
+      peer: { kind: string; id: string };
+    }): ResolvedAgentRoute;
+  };
+  session: {
+    resolveStorePath(store: string | undefined, opts: { agentId: string }): string;
+    readSessionUpdatedAt(params: { storePath: string; sessionKey: string }): number | undefined;
+    recordInboundSession(params: {
+      storePath: string;
+      sessionKey: string;
+      ctx: Record<string, unknown>;
+      updateLastRoute?: {
+        sessionKey: string;
+        channel: string;
+        to: string;
+        accountId?: string;
+      };
+      onRecordError(err: unknown): void;
+    }): Promise<void>;
+  };
+  reply: {
+    resolveEnvelopeFormatOptions(cfg: unknown): unknown;
+    formatAgentEnvelope(params: {
+      channel: string;
+      from: string;
+      timestamp?: number;
+      previousTimestamp?: number;
+      envelope: unknown;
+      body: string;
+    }): string;
+    finalizeInboundContext<T extends Record<string, unknown>>(ctx: T): T;
+    dispatchReplyWithBufferedBlockDispatcher(params: {
+      ctx: Record<string, unknown>;
+      cfg: unknown;
+      dispatcherOptions: {
+        deliver(payload: unknown, info: DeliverInfo): Promise<void>;
+        onError?(err: unknown, info: DeliverInfo): void;
+      };
+    }): Promise<unknown>;
+  };
+};
+
+// Legacy scaffold name — kept for the `ctx.channelRuntime` field type
+// on GatewayContext below.
+export type ChannelRuntimeLike = ImmoChannelRuntime;
+
+/**
+ * Apply the optional ``account.agent`` override to a resolved route.
+ *
+ * OpenClaw session keys follow ``agent:<id>:<channel>:<peer.kind>:<peer.id>``;
+ * we rebuild the segment so the override agent's own session store and
+ * key are used. If the format doesn't match we keep the original to
+ * avoid crashing on a runtime format change.
+ */
+function applyAgentOverride(route: ResolvedAgentRoute, override?: string): ResolvedAgentRoute {
+  if (!override || override === route.agentId) return route;
+  const rebuild = (sk: string): string => {
+    const parts = sk.split(":");
+    if (parts.length >= 2 && parts[0] === "agent") {
+      parts[1] = override;
+      return parts.join(":");
+    }
+    return sk;
+  };
+  return {
+    ...route,
+    agentId: override,
+    sessionKey: rebuild(route.sessionKey),
+    mainSessionKey: route.mainSessionKey ? rebuild(route.mainSessionKey) : undefined
+  };
+}
+
+function normalizePayloadText(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+  const p = payload as { text?: unknown };
+  return typeof p.text === "string" ? p.text : "";
+}
 
 export function listAccountIds(cfg: OpenClawConfig): string[] {
   const ids = Object.keys(parseChannelConfig(cfg).accounts);
@@ -125,36 +212,7 @@ export async function startGateway(ctx: GatewayContext): Promise<void> {
     `immojump:${ctx.accountId}:connected as @${identity.nickname} (${identity.bot_user_id})`
   );
 
-  // Diagnostic — capture the actual function signatures so we can wire
-  // the agent turn correctly without guessing.
-  const cr = ctx.channelRuntime as Record<string, unknown> | undefined;
-  const dumpFn = (label: string, fn: unknown) => {
-    if (typeof fn === "function") {
-      const src = fn.toString();
-      // Look for the first destructure of `params` to learn the field
-      // shape — common pattern: ``const { foo, bar, baz } = params;``
-      const destructure = src.match(/\b(?:const|let|var)\s*\{\s*([^}]{1,800})\s*\}\s*=\s*\b\w+\s*[;,]/m);
-      const lead = src.slice(0, 600).replace(/\s+/g, " ");
-      // eslint-disable-next-line no-console
-      console.error(`[immojump-bot] ${label} lead: ${lead}`);
-      if (destructure) {
-        // eslint-disable-next-line no-console
-        console.error(`[immojump-bot] ${label} destructure: ${destructure[1].replace(/\s+/g, " ")}`);
-      }
-    }
-  };
-  const turn = cr?.turn as Record<string, unknown> | undefined;
-  const routing = cr?.routing as Record<string, unknown> | undefined;
-  if (turn) {
-    dumpFn("turn.run", turn.run);
-    dumpFn("turn.runResolved", turn.runResolved);
-    dumpFn("turn.runPrepared", turn.runPrepared);
-    dumpFn("turn.buildContext", turn.buildContext);
-  }
-  if (routing) {
-    dumpFn("routing.resolveAgentRoute", routing.resolveAgentRoute);
-    dumpFn("routing.buildAgentSessionKey", routing.buildAgentSessionKey);
-  }
+  const cr = ctx.channelRuntime as ImmoChannelRuntime | undefined;
 
   const handler = async (event: InboundEvent): Promise<void> => {
     if (
@@ -167,34 +225,102 @@ export async function startGateway(ctx: GatewayContext): Promise<void> {
     }
     if (!event.feedEventId) return;
     const feedEventId = event.feedEventId;
+
+    if (!cr) {
+      // No host runtime — fail loudly so the operator notices the gateway
+      // misconfiguration instead of getting silent "Thinking…" forever.
+      await sendReplyLifecycle({
+        client,
+        feedEventId,
+        finalText:
+          "_(OpenClaw channelRuntime fehlt im host-context — keine Agent-Loop verfügbar)_"
+      });
+      return;
+    }
+
+    // Resolve the agent route the host wants for this peer, then apply
+    // the account.agent override so each immoJUMP bot can pin its own
+    // persona (rex-recherche, clara-crm, ...).
+    const baseRoute = cr.routing.resolveAgentRoute({
+      cfg: ctx.cfg ?? {},
+      channel: "immojump",
+      accountId: ctx.accountId,
+      peer: { kind: "feed_event", id: feedEventId }
+    });
+    const route = applyAgentOverride(baseRoute, account.agent);
+    const storePath = cr.session.resolveStorePath(ctx.cfg?.session?.store, {
+      agentId: route.agentId
+    });
+    const previousTimestamp = cr.session.readSessionUpdatedAt({
+      storePath,
+      sessionKey: route.sessionKey
+    });
+    const envelopeOptions = cr.reply.resolveEnvelopeFormatOptions(ctx.cfg ?? {});
+    const timestamp = Date.parse(event.createdAt) || Date.now();
+    const conversationLabel = `immojump://${feedEventId}`;
+
+    const body = cr.reply.formatAgentEnvelope({
+      channel: "immoJUMP",
+      from: conversationLabel,
+      timestamp,
+      previousTimestamp,
+      envelope: envelopeOptions,
+      body: event.text
+    });
+
+    const ctxPayload = cr.reply.finalizeInboundContext({
+      Body: body,
+      BodyForAgent: event.text,
+      RawBody: event.text,
+      CommandBody: event.text,
+      From: event.senderUserId,
+      To: conversationLabel,
+      SessionKey: route.sessionKey,
+      AccountId: route.accountId ?? ctx.accountId,
+      ChatType: "feed_event",
+      ConversationLabel: conversationLabel,
+      SenderId: event.senderUserId,
+      Provider: "immojump",
+      Surface: "immojump",
+      MessageSid: event.id,
+      MessageSidFull: event.id,
+      Timestamp: timestamp,
+      OriginatingChannel: "immojump",
+      OriginatingTo: conversationLabel
+    } as Record<string, unknown>);
+
+    await cr.session.recordInboundSession({
+      storePath,
+      sessionKey: route.sessionKey,
+      ctx: ctxPayload,
+      updateLastRoute: {
+        sessionKey: route.mainSessionKey ?? route.sessionKey,
+        channel: "immojump",
+        to: conversationLabel,
+        accountId: route.accountId ?? ctx.accountId
+      },
+      onRecordError: (err) =>
+        ctx.setStatus?.(`immojump:${ctx.accountId}:record-error:${String(err)}`)
+    });
+
     await sendReplyLifecycle({
       client,
       feedEventId,
       run: async (session) => {
-        if (!ctx.channelRuntime?.dispatch) {
-          await session.update({
-            kind: "final",
-            payload: {
-              text: "_(OpenClaw channelRuntime not wired — plugin scaffold; no agent loop yet.)_"
-            }
-          });
-          return;
-        }
-        const result = await ctx.channelRuntime.dispatch({
-          accountId: ctx.accountId,
-          sessionKey: `immojump:${ctx.accountId}:${feedEventId}`,
-          text: event.text,
-          metadata: {
-            channel: "immojump",
-            feedEventId,
-            commentId: event.commentId,
-            senderUserId: event.senderUserId,
-            agent: account.agent
+        await cr.reply.dispatchReplyWithBufferedBlockDispatcher({
+          ctx: ctxPayload,
+          cfg: ctx.cfg ?? {},
+          dispatcherOptions: {
+            deliver: async (payload, info) => {
+              const text = normalizePayloadText(payload);
+              if (!text) return;
+              await session.update({ kind: info.kind, payload: { text } });
+            },
+            onError: (err, info) =>
+              ctx.setStatus?.(
+                `immojump:${ctx.accountId}:dispatch-error:${info.kind}:${String(err)}`
+              )
           }
-        });
-        await session.update({
-          kind: "final",
-          payload: { text: result?.replyText ?? "" }
         });
       }
     });
