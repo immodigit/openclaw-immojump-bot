@@ -7,7 +7,12 @@ import { marked } from "marked";
 // Plugin-eigenen Bausteine (THINKING_PLACEHOLDER, EMPTY_REPLY_FALLBACK,
 // Fehler-Praefix) sind schon als HTML formuliert.
 export const THINKING_PLACEHOLDER = "🤔 <em>Denke nach…</em>";
-export const EMPTY_REPLY_FALLBACK = "<em>(keine Antwort generiert)</em>";
+// Ein leiser fall-back, der dem Operator erklaert *was* passiert ist und
+// *wie weiter* — statt nur "(keine Antwort generiert)" zu rufen oder die
+// Nachricht ganz zu loeschen (was den User mit einem leeren Thread und
+// keinerlei Signal zurueck laesst, dass der Bot ueberhaupt versucht hat).
+export const EMPTY_REPLY_FALLBACK =
+  "⚠️ <em>Ich habe gerade keine Antwort produziert — vermutlich fehlt mir ein Tool oder Kontext. Schreib mir bitte nochmal mit mehr Details.</em>";
 
 export type ReplyStageKind = "tool" | "block" | "final";
 
