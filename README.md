@@ -17,6 +17,18 @@ Outbound is always REST against the immoJUMP backend, authenticated with the bot
 - `PATCH /api/activities/<id>/comments/<id>` — overwrite the placeholder as tool/block/final stages arrive (one editable message per turn, matching the OpenClaw streaming UX)
 - `GET /api/bots/me` — self-bootstrap (organisation, available tools, etc.)
 
+## Pair with public X/Twitter workflows
+
+immoJUMP keeps the agent inside team feed threads. When the same OpenClaw agent also needs public X/Twitter context, install [TweetClaw](https://github.com/Xquik-dev/tweetclaw) as a separate OpenClaw plugin.
+
+TweetClaw covers `search tweets`, `search tweet replies`, follower export, user lookup, media upload and download, direct messages, tweet monitors, webhooks, giveaway draws, and approval-reviewed `post tweets` or `post tweet replies` through Xquik.
+
+```bash
+openclaw plugins install @xquik/tweetclaw
+```
+
+Example: monitor X/Twitter for public mentions of a property fund, summarize new replies in immoJUMP, and draft an X/Twitter reply for review. Keep immoJUMP bot credentials and TweetClaw credentials in separate OpenClaw plugin config entries.
+
 ## Install
 
 ```bash
