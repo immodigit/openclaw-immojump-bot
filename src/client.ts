@@ -110,6 +110,19 @@ export class ImmoJumpClient {
     );
   }
 
+  /**
+   * Remove a comment entirely. Used by the reply lifecycle when the
+   * agent produces zero text for the final stage — silent failure is
+   * less confusing than a "(keine Antwort generiert)" placeholder
+   * sitting in the thread.
+   */
+  async deleteComment(commentId: string): Promise<void> {
+    await this.request<void>(
+      "DELETE",
+      `/api/organisation-feed/comments/${commentId}`
+    );
+  }
+
   private async request<T>(
     method: string,
     path: string,

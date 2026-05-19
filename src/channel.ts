@@ -78,7 +78,31 @@ export async function sendReplyLifecycle(opts: SendReplyLifecycleOptions): Promi
 
   try {
     await opts.run!(session);
-    if (!finalSeen) await flush(lastBody === THINKING_PLACEHOLDER ? EMPTY_REPLY_FALLBACK : lastBody);
+    if (!finalSeen) {
+      // Empty-final path: the agent produced no text for the final
+      // stage (model abort, no tools, persona refusing the prompt, …).
+      // Two cases:
+      //   * lastBody is still the "🤔 Denke nach…" placeholder — there
+      //     is nothing useful in the thread. Delete the placeholder
+      //     instead of leaving "(keine Antwort generiert)" visible to
+      //     the user. Pattern lifted from openclaw-rocketchat-bot 57d5f46.
+      //   * lastBody contains streamed tool/block chunks — keep them
+      //     visible; they're a partial answer, not garbage.
+      if (lastBody === THINKING_PLACEHOLDER) {
+        try {
+          await opts.client.deleteComment(placeholder.id);
+          return;
+        } catch (delErr) {
+          // Delete might fail for permission reasons or older backend
+          // builds — degrade to the visible fallback so the operator
+          // at least sees that the bot ran.
+          void delErr;
+          await flush(EMPTY_REPLY_FALLBACK);
+          return;
+        }
+      }
+      await flush(lastBody);
+    }
   } catch (err) {
     await session.fail(err);
   }
