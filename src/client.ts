@@ -18,6 +18,25 @@ export type BotIdentity = {
   organisation_id: string;
 };
 
+/** The thread-root feed event a mention belongs to. */
+export type MentionEventContext = {
+  id: string;
+  title: string | null;
+  message: string | null;
+  user_id?: number | null;
+  user_name?: string | null;
+  created_at?: string | null;
+};
+
+/** A recent thread comment handed to the bot as conversation context. */
+export type MentionThreadComment = {
+  id: string;
+  user_id?: number | null;
+  user_name?: string | null;
+  message: string;
+  created_at?: string | null;
+};
+
 export type Mention = {
   id: string;
   activity_id?: string;
@@ -26,6 +45,14 @@ export type Mention = {
   body_html: string;
   sender_user_id: string;
   created_at: string;
+  /** Kind of message the @-mention appeared in. Enriched backend only. */
+  trigger_kind?: "post" | "comment";
+  /** Full HTML text of the post/comment that mentioned the bot. */
+  trigger_text?: string | null;
+  /** The thread-root feed event (the post the bot comments under). */
+  event?: MentionEventContext | null;
+  /** Most recent thread comments (chronological), excluding the trigger. */
+  thread?: MentionThreadComment[];
 };
 
 export type Comment = {

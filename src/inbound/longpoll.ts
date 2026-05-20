@@ -1,5 +1,6 @@
 import type { ImmoJumpClient } from "../client.js";
-import type { InboundEvent, InboundHandler, InboundTransport } from "./types.js";
+import { mentionToInboundEvent } from "./mention-mapper.js";
+import type { InboundHandler, InboundTransport } from "./types.js";
 
 export type LongpollTransportOptions = {
   client: ImmoJumpClient;
@@ -27,16 +28,7 @@ export function createLongpollTransport(opts: LongpollTransportOptions): Inbound
     const since = (await opts.loadCursor()) ?? undefined;
     const mentions = await opts.client.listMentions(since, opts.timeoutSec);
     for (const m of mentions) {
-      const event: InboundEvent = {
-        id: m.id,
-        type: "mention.created",
-        feedEventId: m.feed_event_id ?? null,
-        commentId: m.comment_id,
-        text: m.body_html,
-        senderUserId: m.sender_user_id,
-        createdAt: m.created_at
-      };
-      await opts.handler(event);
+      await opts.handler(mentionToInboundEvent(m));
       await opts.saveCursor(m.created_at);
     }
   }
