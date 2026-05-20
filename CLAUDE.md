@@ -61,9 +61,15 @@ npm run typecheck    # tsc --noEmit -p tsconfig.json
   resolved by `OrganisationMember.nickname`). Poll
   `GET /api/organisation-feed/<event_id>/comments`. Trigger bot B by posting as a
   different bot A (the mention's own actor is skipped).
-- **Known limitation:** a mentioned bot's inbound (`Mention.body_html` from
-  `/api/bots/me/mentions`) carries only the notification headline + ~120-char
-  snippet, not the full post/comment text. Strict-persona bots (e.g.
-  `rex-recherche`) then reply "ich sehe nur die Erwähnung, nicht den Beitragstext"
-  and ask for parameters instead of running tools — so feed e2e of tool-using
-  behaviour is unreliable. Pre-existing, separate from the tool-progress feature.
+- **Mention inbound context:** the agent receives the *full conversation*, not
+  just the notification headline. `inbound/mention-mapper.ts` (`buildMentionText`)
+  composes the thread-root post + the last ~4 thread comments + the full
+  triggering text from the enriched `Mention` (`event` / `thread` /
+  `trigger_text`); `htmlToText` strips feed HTML to prose. This depends on the
+  immoJUMP backend `GET /api/bots/me/mentions` sending those fields (added
+  2026-05-20, `bot_routes.py` `_mention_context`); `buildMentionText` falls back
+  to `body_html` against an older backend. Before this fix a mentioned bot only
+  saw a ~120-char snippet and strict-persona agents asked for clarification
+  instead of acting. Verified live: `rex-recherche` received a full research
+  brief and ran the task (Web Search → Browser → Web Fetch) end-to-end with the
+  tool-progress view rolling live.
