@@ -325,7 +325,10 @@ export async function startGateway(ctx: GatewayContext): Promise<void> {
           dispatcherOptions: {
             deliver: async (payload, info) => {
               const text = normalizePayloadText(payload);
-              if (!text) return;
+              // Tool-Fortschritts-Lieferungen zeigen wir auch ohne Text —
+              // sie signalisieren "ein Arbeitsschritt laeuft". block/final
+              // ohne Text tragen nichts, die ueberspringen wir weiterhin.
+              if (!text && info.kind !== "tool") return;
               await session.update({ kind: info.kind, payload: { text } });
             },
             onError: (err, info) =>
