@@ -76,4 +76,36 @@ describe("parsePluginConfig", () => {
       })
     ).toThrow();
   });
+
+  it("accepts longpoll transport with default timeoutSec", () => {
+    const cfg = parsePluginConfig({
+      accounts: {
+        main: {
+          enabled: true,
+          serverUrl: "https://beta.immojump.de",
+          auth: { botToken: "t".repeat(40) },
+          transport: { mode: "longpoll" }
+        }
+      }
+    });
+    expect(cfg.accounts.main.transport.mode).toBe("longpoll");
+    if (cfg.accounts.main.transport.mode === "longpoll") {
+      expect(cfg.accounts.main.transport.timeoutSec).toBe(25);
+    }
+  });
+
+  it("rejects longpoll timeoutSec above 50", () => {
+    expect(() =>
+      parsePluginConfig({
+        accounts: {
+          main: {
+            enabled: true,
+            serverUrl: "https://beta.immojump.de",
+            auth: { botToken: "t".repeat(40) },
+            transport: { mode: "longpoll", timeoutSec: 120 }
+          }
+        }
+      })
+    ).toThrow();
+  });
 });

@@ -38,7 +38,7 @@ type BackendEnvelope = {
 };
 
 /**
- * Translate the immo-calc outbound-webhook envelope (nested, snake_case)
+ * Translate the immoJUMP outbound-webhook envelope (nested, snake_case)
  * into the flat camelCase shape the rest of the plugin works with.
  * `text` is taken from the original notification body / headline so the
  * agent has something to react to even though the backend does not ship
