@@ -32,7 +32,7 @@ npm run typecheck    # tsc --noEmit -p tsconfig.json
   (`/api/bots/me`, `/api/bots/me/mentions` long-poll, `/api/organisation-feed/*`).
 - Inbound transports: `longpoll` / `polling` / `webhook` (`src/inbound/`).
 
-## Memory — tool-progress feature & live ops (Stand 2026-05-20)
+## Memory — tool-progress feature & inbound context
 
 - **Tool-progress view:** `format.ts`/`channel.ts` render a live progress view —
   `🛠️ <em>Ich arbeite daran …</em>` plus a rolling list of step lines (cap 6,
@@ -46,30 +46,22 @@ npm run typecheck    # tsc --noEmit -p tsconfig.json
   the instance's `~/.openclaw/openclaw.json`. Without it the comment goes
   placeholder → final with no progress view. Plugin code is necessary but NOT
   sufficient.
-- **Deploy:** push to `main`; the OpenClaw pod's initContainer pulls
-  `github:immodigit/openclaw-immojump-bot#main` (env `IMMOJUMP_PLUGIN_REF=main`)
-  and rebuilds on pod start. Redeploy = `kubectl delete pod <openclaw-pod> -n <openclaw-namespace>`.
-  Verify: `grep -c TOOL_PROGRESS_HEADER ~/.openclaw/extensions/openclaw-immojump-bot/dist/format.js`.
-- **Runs in:** K8s ns `<openclaw-namespace>`, pod `<openclaw-pod>`, 4 bots — `clara-crm`,
-  `otto-outreach`, `rex-recherche`, `wanda-website` — on beta.immojump.de,
-  org `<org-id>`. (`<scratch-namespace>` ns is a
-  scratch instance with NO immojump accounts configured.)
-- **e2e test:** immoJUMP feed REST with a bot Bearer token (env
-  `IMMOJUMP_BOT_TOKEN_<BOT>` in `<openclaw-pod>`) + header
-  `X-Organisation-Id`. `POST /api/organisation-feed/post {message}` — a plain
-  `@nickname` in the text triggers that bot (mention regex `@([\w.\-]{2,32})`,
-  resolved by `OrganisationMember.nickname`). Poll
-  `GET /api/organisation-feed/<event_id>/comments`. Trigger bot B by posting as a
-  different bot A (the mention's own actor is skipped).
+- **Deploy:** push to `main`; an OpenClaw instance's initContainer pulls
+  `github:immodigit/openclaw-immojump-bot#main` (env `IMMOJUMP_PLUGIN_REF`) and
+  rebuilds the plugin on pod start — redeploy by restarting the pod. Verify:
+  `grep -c TOOL_PROGRESS_HEADER ~/.openclaw/extensions/openclaw-immojump-bot/dist/format.js`.
+- **e2e test:** drive the immoJUMP feed REST API with a bot Bearer token +
+  header `X-Organisation-Id`. `POST /api/organisation-feed/post {message}` — a
+  plain `@nickname` in the text triggers that bot (mention regex
+  `@([\w.\-]{2,32})`, resolved by `OrganisationMember.nickname`). Poll
+  `GET /api/organisation-feed/<event_id>/comments`. Trigger one bot from another
+  by posting as a different bot (a mention's own actor is skipped).
 - **Mention inbound context:** the agent receives the *full conversation*, not
   just the notification headline. `inbound/mention-mapper.ts` (`buildMentionText`)
   composes the thread-root post + the last ~4 thread comments + the full
   triggering text from the enriched `Mention` (`event` / `thread` /
   `trigger_text`); `htmlToText` strips feed HTML to prose. This depends on the
-  immoJUMP backend `GET /api/bots/me/mentions` sending those fields (added
-  2026-05-20, `bot_routes.py` `_mention_context`); `buildMentionText` falls back
-  to `body_html` against an older backend. Before this fix a mentioned bot only
-  saw a ~120-char snippet and strict-persona agents asked for clarification
-  instead of acting. Verified live: `rex-recherche` received a full research
-  brief and ran the task (Web Search → Browser → Web Fetch) end-to-end with the
-  tool-progress view rolling live.
+  immoJUMP backend `GET /api/bots/me/mentions` sending those fields;
+  `buildMentionText` falls back to `body_html` against an older backend. Without
+  the enriched fields a mentioned bot only sees a short snippet and
+  strict-persona agents ask for clarification instead of acting.
